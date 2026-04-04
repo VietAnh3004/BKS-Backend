@@ -1,0 +1,28 @@
+server:
+  port: 8080
+
+spring:
+  # 1. MySQL Configuration
+  datasource:
+    url: jdbc:mysql://localhost:3306/bks_social_db
+    username: root
+    password: rootpassword
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  # 2. Gom MongoDB và Redis vào chung một khối 'data'
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/bks_social_db
+    redis:
+      host: localhost
+      port: 6379
+
+# 3. Cấu hình bên ngoài khối 'spring'
+minio:
+  endpoint: http://127.0.0.1:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  bucket-name: bks-uploads

@@ -1,0 +1,51 @@
+services:
+  # 1. MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: bks_mysql
+    restart: always
+    environment:
+      MYSQL_DATABASE: bks_social_db
+      MYSQL_ROOT_PASSWORD: rootpassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  # 2. MongoDB
+  mongodb:
+    image: mongo:latest
+    container_name: bks_mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  # 3. Redis
+  redis:
+    image: redis:alpine
+    container_name: bks_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  # 4. MinIO (Object Storage)
+  minio:
+    image: minio/minio:latest
+    container_name: bks_minio
+    restart: always
+    ports:
+      - "9000:9000"  # API port
+      - "9001:9001"  # Console UI port
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+volumes:
+  mysql_data:
+  mongo_data:
+  minio_data:
