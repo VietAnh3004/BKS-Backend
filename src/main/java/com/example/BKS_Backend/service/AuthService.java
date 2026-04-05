@@ -35,6 +35,14 @@ public class AuthService {
     private CustomUserDetailsService userDetailsService;
 
     public AuthResponse register(RegisterRequest request) {
+        if (!request.getEmail().matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
+            throw new RuntimeException("Định dạng email không hợp lệ!");
+        }
+        
+        if (!request.getPassword().matches("^(?=.*[A-Za-z])(?=.*\\d).+$")) {
+            throw new RuntimeException("Mật khẩu phải chứa ít nhất một chữ cái và một chữ số!");
+        }
+
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new RuntimeException("Tên đăng nhập đã tồn tại!");
         }

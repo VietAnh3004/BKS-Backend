@@ -1,6 +1,5 @@
 package com.example.BKS_Backend.controller;
 
-import com.example.BKS_Backend.dto.AuthResponse;
 import com.example.BKS_Backend.dto.LoginRequest;
 import com.example.BKS_Backend.dto.RegisterRequest;
 import com.example.BKS_Backend.service.AuthService;

@@ -45,6 +45,25 @@ services:
     volumes:
       - minio_data:/data
 
+  # 5. Spring Boot Backend
+  backend:
+    build: .
+    container_name: bks_backend
+    restart: on-failure
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql
+      - mongodb
+      - redis
+      - minio
+    environment:
+      # Liên kết qua Service Name của Docker thay vì localhost
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/bks_social_db
+      - SPRING_DATA_MONGODB_URI=mongodb://mongodb:27017/bks_social_db
+      - SPRING_DATA_REDIS_HOST=redis
+      - MINIO_ENDPOINT=http://minio:9000
+
 volumes:
   mysql_data:
   mongo_data:
