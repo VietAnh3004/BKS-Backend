@@ -1,14 +1,20 @@
 package com.example.BKS_Backend.service;
 
-import com.example.BKS_Backend.dto.AuthResponse;
+import com.example.BKS_Backend.dto.LoginResponseDTO;
+import com.example.BKS_Backend.dto.RegisterResponseDTO;
+import com.example.BKS_Backend.dto.UserAuthDTO;
 import com.example.BKS_Backend.dto.LoginRequest;
 import com.example.BKS_Backend.dto.RegisterRequest;
 import com.example.BKS_Backend.dto.UserDTO;
+import com.example.BKS_Backend.entity.RefreshToken;
 import com.example.BKS_Backend.entity.Role;
 import com.example.BKS_Backend.entity.User;
 import com.example.BKS_Backend.repository.UserRepository;
 import com.example.BKS_Backend.security.CustomUserDetailsService;
 import com.example.BKS_Backend.security.JwtUtil;
+import com.example.BKS_Backend.dto.RefreshTokenRequest;
+import java.util.Map;
+import java.util.HashMap;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -33,8 +39,11 @@ public class AuthService {
 
     @Autowired
     private CustomUserDetailsService userDetailsService;
+    
+    @Autowired
+    private RefreshTokenService refreshTokenService;
 
-    public AuthResponse register(RegisterRequest request) {
+    public RegisterResponseDTO register(RegisterRequest request) {
         if (!request.getEmail().matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
             throw new RuntimeException("Định dạng email không hợp lệ!");
         }
@@ -43,48 +52,71 @@ public class AuthService {
             throw new RuntimeException("Mật khẩu phải chứa ít nhất một chữ cái và một chữ số!");
         }
 
-        if (userRepository.existsByUsername(request.getUsername())) {
-            throw new RuntimeException("Tên đăng nhập đã tồn tại!");
+        if (userRepository.existsByUsername(request.getDisplayName())) {
+            throw new RuntimeException("Tên hiển thị đã bị trùng!");
         }
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Email đã được sử dụng!");
         }
 
         User user = User.builder()
-                .username(request.getUsername())
+                .username(request.getDisplayName())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
+                .displayName(request.getDisplayName())
                 .role(Role.USER)
                 .build();
 
         User savedUser = userRepository.save(user);
 
-        UserDetails userDetails = userDetailsService.loadUserByUsername(savedUser.getUsername());
-        String token = jwtUtil.generateToken(userDetails);
-
-        return AuthResponse.builder()
-                .token(token)
+        return RegisterResponseDTO.builder()
                 .user(mapToUserDTO(savedUser))
                 .build();
     }
 
-    public AuthResponse login(LoginRequest request) {
+    public LoginResponseDTO login(LoginRequest request) {
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
         );
 
-        User user = userRepository.findByUsername(request.getUsername())
+        User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
 
-        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
+        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
         String token = jwtUtil.generateToken(userDetails);
+        
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getId());
+        
+        UserAuthDTO userAuthDTO = UserAuthDTO.builder()
+                .email(user.getEmail())
+                .provider("local")
+                .build();
 
-        return AuthResponse.builder()
-                .token(token)
+        return LoginResponseDTO.builder()
+                .type("Bearer")
+                .accessToken(token)
+                .refreshToken(refreshToken.getToken())
+                .userAuth(userAuthDTO)
                 .user(mapToUserDTO(user))
                 .build();
+    }
+
+    public Map<String, String> refreshToken(RefreshTokenRequest request) {
+        return refreshTokenService.findByToken(request.getRefreshToken())
+                .map(refreshTokenService::verifyExpiration)
+                .map(RefreshToken::getUser)
+                .map(u -> {
+                    UserDetails userDetails = userDetailsService.loadUserByUsername(u.getUsername());
+                    String token = jwtUtil.generateToken(userDetails);
+                    RefreshToken newRefreshToken = refreshTokenService.createRefreshToken(u.getId());
+                    Map<String, String> tokens = new HashMap<>();
+                    tokens.put("accessToken", token);
+                    tokens.put("refreshToken", newRefreshToken.getToken());
+                    return tokens;
+                })
+                .orElseThrow(() -> new RuntimeException("Refresh token is missing or invalid"));
     }
 
     public UserDTO mapToUserDTO(User user) {
@@ -94,7 +126,13 @@ public class AuthService {
         dto.setEmail(user.getEmail());
         dto.setFirstName(user.getFirstName());
         dto.setLastName(user.getLastName());
-        dto.setAvatarUrl(user.getAvatarUrl());
+        dto.setDisplayName(user.getDisplayName() != null ? user.getDisplayName() : user.getFirstName() + " " + user.getLastName());
+        dto.setAvatarKey(user.getAvatarKey());
+        dto.setBackgroundKey(user.getBackgroundKey());
+        dto.setBio(user.getBio());
+        dto.setEmailVerified(user.isEmailVerified());
+        dto.setFriendsCount(user.getFriendsCount());
+        dto.setCreatedAt(user.getCreatedAt() != null ? user.getCreatedAt().toString() : null);
         dto.setRole(user.getRole());
         return dto;
     }

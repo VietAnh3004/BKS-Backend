@@ -10,6 +10,12 @@ public class UserDTO {
     private String email;
     private String firstName;
     private String lastName;
-    private String avatarUrl;
+    private String displayName;
+    private String avatarKey;
+    private String backgroundKey;
+    private String bio;
+    private boolean emailVerified;
+    private int friendsCount;
+    private String createdAt;
     private Role role;
 }

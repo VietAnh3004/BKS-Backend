@@ -32,6 +32,22 @@ public class User {
 
     private String lastName;
 
+    private String displayName;
+
+    private String bio;
+
+    private String backgroundKey;
+
+    private String avatarKey;
+
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean emailVerified = false;
+
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "int default 0")
+    private int friendsCount = 0;
+
     private String avatarUrl;
 
     @Enumerated(EnumType.STRING)
