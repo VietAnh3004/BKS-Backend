@@ -13,6 +13,12 @@ import com.example.BKS_Backend.repository.UserRepository;
 import com.example.BKS_Backend.security.CustomUserDetailsService;
 import com.example.BKS_Backend.security.JwtUtil;
 import com.example.BKS_Backend.dto.RefreshTokenRequest;
+import com.example.BKS_Backend.entity.VerificationToken;
+import com.example.BKS_Backend.repository.VerificationTokenRepository;
+import org.springframework.transaction.annotation.Transactional;
+import java.time.Instant;
+import java.time.Duration;
+import java.util.UUID;
 import java.util.Map;
 import java.util.HashMap;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,15 +45,22 @@ public class AuthService {
 
     @Autowired
     private CustomUserDetailsService userDetailsService;
-    
+
     @Autowired
     private RefreshTokenService refreshTokenService;
 
+    @Autowired
+    private VerificationTokenRepository verificationTokenRepository;
+
+    @Autowired
+    private EmailService emailService;
+
+    @Transactional
     public RegisterResponseDTO register(RegisterRequest request) {
         if (!request.getEmail().matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
             throw new RuntimeException("Định dạng email không hợp lệ!");
         }
-        
+
         if (!request.getPassword().matches("^(?=.*[A-Za-z])(?=.*\\d).+$")) {
             throw new RuntimeException("Mật khẩu phải chứa ít nhất một chữ cái và một chữ số!");
         }
@@ -71,6 +84,15 @@ public class AuthService {
 
         User savedUser = userRepository.save(user);
 
+        VerificationToken verificationToken = VerificationToken.builder()
+                .user(savedUser)
+                .token(UUID.randomUUID().toString())
+                .expiryDate(Instant.now().plus(Duration.ofMinutes(15)))
+                .build();
+        verificationTokenRepository.save(verificationToken);
+
+        emailService.sendVerificationEmail(savedUser.getEmail(), verificationToken.getToken());
+
         return RegisterResponseDTO.builder()
                 .user(mapToUserDTO(savedUser))
                 .build();
@@ -78,17 +100,20 @@ public class AuthService {
 
     public LoginResponseDTO login(LoginRequest request) {
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
 
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
 
+        if (!user.isEmailVerified()) {
+            throw new RuntimeException("Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email!");
+        }
+
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
         String token = jwtUtil.generateToken(userDetails);
-        
+
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getId());
-        
+
         UserAuthDTO userAuthDTO = UserAuthDTO.builder()
                 .email(user.getEmail())
                 .provider("local")
@@ -119,6 +144,22 @@ public class AuthService {
                 .orElseThrow(() -> new RuntimeException("Refresh token is missing or invalid"));
     }
 
+    @Transactional
+    public void verifyEmailToken(String token) {
+        VerificationToken verificationToken = verificationTokenRepository.findByToken(token)
+                .orElseThrow(() -> new RuntimeException("Link xác thực không hợp lệ!"));
+
+        if (verificationToken.getExpiryDate().isBefore(Instant.now())) {
+            throw new RuntimeException("Link xác thực đã hết hạn!");
+        }
+
+        User user = verificationToken.getUser();
+        user.setEmailVerified(true);
+        userRepository.save(user);
+
+        verificationTokenRepository.delete(verificationToken);
+    }
+
     public UserDTO mapToUserDTO(User user) {
         UserDTO dto = new UserDTO();
         dto.setId(user.getId());
@@ -126,7 +167,8 @@ public class AuthService {
         dto.setEmail(user.getEmail());
         dto.setFirstName(user.getFirstName());
         dto.setLastName(user.getLastName());
-        dto.setDisplayName(user.getDisplayName() != null ? user.getDisplayName() : user.getFirstName() + " " + user.getLastName());
+        dto.setDisplayName(
+                user.getDisplayName() != null ? user.getDisplayName() : user.getFirstName() + " " + user.getLastName());
         dto.setAvatarKey(user.getAvatarKey());
         dto.setBackgroundKey(user.getBackgroundKey());
         dto.setBio(user.getBio());

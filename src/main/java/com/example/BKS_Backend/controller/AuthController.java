@@ -42,4 +42,16 @@ public class AuthController {
             return ResponseEntity.badRequest().body(ApiResponse.error(400, e.getMessage()));
         }
     }
+
+    @GetMapping("/verify")
+    public ResponseEntity<?> verifyEmail(@RequestParam("token") String token) {
+        try {
+            authService.verifyEmailToken(token);
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.add("Location", "http://localhost:5173/login?verified=true");
+            return new ResponseEntity<>(headers, org.springframework.http.HttpStatus.FOUND);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Xác thực thất bại: " + e.getMessage());
+        }
+    }
 }
